@@ -15,9 +15,9 @@ func main() {
 	mux := http.NewServeMux()
 	apiCfg := apiConfig{}
 	mux.Handle("/app/*", http.StripPrefix("/app", apiCfg.middlewareMetricsInc(http.FileServer(http.Dir(".")))))
-	mux.HandleFunc("GET /healthz", readinessHandler)
-	mux.HandleFunc("GET /metrics", apiCfg.middlewareMetricsResult)
-	mux.HandleFunc("/reset", apiCfg.middlewareMetricsReset)
+	mux.HandleFunc("GET /api/healthz", readinessHandler)
+	mux.HandleFunc("GET /admin/metrics", apiCfg.middlewareMetricsResult)
+	mux.HandleFunc("/api/reset", apiCfg.middlewareMetricsReset)
 
 	server := &http.Server{
 		Addr:    "localhost:8080",
@@ -43,8 +43,9 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 func (cfg *apiConfig) middlewareMetricsResult(writer http.ResponseWriter, request *http.Request) {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
-	body := fmt.Sprintf("Hits: %d", cfg.fileserverHits)
+	body := fmt.Sprintf("<html><body><h1>Welcome, Chirpy Admin</h1><p>Chirpy has been visited %d times!</p></body></html>", cfg.fileserverHits)
 	writer.WriteHeader(200)
+	writer.Header().Add("Content-Type", "text/html")
 	writer.Write([]byte(body))
 }
 
