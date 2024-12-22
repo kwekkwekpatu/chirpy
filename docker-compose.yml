@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  sqlc:
+    build: .
+    command: sqlc generate
+    volumes:
+      - ./sql:/app/sql
+      - ./sqlc.yaml:/app/sqlc.yaml
+      - .:/app/src
+
+  goose:
+    build: .
+    command: sh -c "echo 'Starting goose service...' && echo 'DB_URL=${DB_URL}' && ./scripts/wait-for-it.sh db:5432 -- goose -v -dir /app/sql/schema postgres '${DB_URL}' up 2>&1"
+    volumes:
+      - ./sql:/app/sql
+      - ./sqlc.yaml:/app/sqlc.yaml
+      - ./scripts:/app/scripts
+    depends_on:
+      - db
+      - sqlc
+
+  chirpy-app:
+    build: .
+    volumes:
+      - ./sql:/app/sql
+      - ./sqlc.yaml:/app/sqlc.yaml
+      - ./scripts:/app/scripts
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: ${DB_URL}
+      PLATFORM: ${PLATFORM}
+    depends_on:
+      - goose
+    command: sh -c "./scripts/wait-for-it.sh db:5432 -- /bin/chirpy"
+
+volumes:
+  db_data:
