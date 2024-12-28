@@ -41,7 +41,7 @@ type Chirp struct {
 
 type ChirpSlice []Chirp
 
-var internalServerErrorJSON = []byte(`{"error":"Something went wrong"}`)
+var internalServerError = "Something went wrong"
 
 var (
 	InfoLogger  *log.Logger
@@ -135,7 +135,7 @@ func (cfg *apiConfig) middlewareMetricsResult(writer http.ResponseWriter, reques
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 	body := fmt.Sprintf("<html><body><h1>Welcome, Chirpy Admin</h1><p>Chirpy has been visited %d times!</p></body></html>", cfg.fileserverHits)
-	writer.WriteHeader(200)
+	writer.WriteHeader(http.StatusOK)
 	writer.Header().Add("Content-Type", "text/html")
 	writer.Write([]byte(body))
 }
@@ -144,7 +144,7 @@ func (cfg *apiConfig) middlewareMetricsReset(writer http.ResponseWriter, request
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 	cfg.fileserverHits = 0
-	writer.WriteHeader(200)
+	writer.WriteHeader(http.StatusOK)
 }
 
 func (cfg *apiConfig) chirpHandler(writer http.ResponseWriter, request *http.Request) {
@@ -157,10 +157,6 @@ func (cfg *apiConfig) chirpHandler(writer http.ResponseWriter, request *http.Req
 		Cleaned_body string `json:"cleaned_body"`
 	}
 
-	type errorResponse struct {
-		Error string `json:"error"`
-	}
-
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 	InfoLogger.Printf("Handling chirp creation.")
@@ -171,40 +167,27 @@ func (cfg *apiConfig) chirpHandler(writer http.ResponseWriter, request *http.Req
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		writer.WriteHeader(500)
-		writer.Write(internalServerErrorJSON)
+		respondWithError(writer, request, http.StatusBadRequest, internalServerError, err)
 		return
 	}
 
 	InfoLogger.Printf("Successfully loaded chirp for user_id: %s", params.User_id)
 	if params.User_id == uuid.Nil {
 		WarnLogger.Printf("The user_id paramater is empty. Cannot create a new chirp without a user_id.")
-		writer.WriteHeader(400)
-		writer.Write([]byte(`{"error":"User_ID is required"}`))
+		respondWithError(writer, request, http.StatusBadRequest, "User_ID is required", nil)
 		return
 	}
 
 	InfoLogger.Printf("Checking if length of chirp is more than 140 characters")
 	if len(params.Body) > 140 {
-		ErrorLogger.Print("Chirp is too long.")
-		response := errorResponse{Error: "Chirp is too long"}
-		dat, err := json.Marshal(response)
-		if err != nil {
-			writer.WriteHeader(500)
-			writer.Write(internalServerErrorJSON)
-			return
-		}
-		writer.WriteHeader(400)
-		writer.Write(dat)
+		respondWithError(writer, request, http.StatusBadRequest, "Chirp is too long", fmt.Errorf("Chirp is too long"))
 		return
 	}
 
 	InfoLogger.Printf("Cleaning the body of the chirp from: %s", params.User_id)
 	cleaned_body, err := cleanBody(params.Body)
 	if err != nil {
-		ErrorLogger.Print("Failed to clean the body!")
-		writer.WriteHeader(500)
-		writer.Write(internalServerErrorJSON)
+		respondWithError(writer, request, http.StatusBadRequest, "Failed to clean the body!", err)
 		return
 	}
 
@@ -219,9 +202,7 @@ func (cfg *apiConfig) chirpHandler(writer http.ResponseWriter, request *http.Req
 	InfoLogger.Printf("Attempting to create chirp with user_id: %s", params.User_id)
 	chirp, err := cfg.db.CreateChirp(request.Context(), chirpParams)
 	if err != nil {
-		ErrorLogger.Println(err)
-		writer.WriteHeader(500)
-		writer.Write([]byte(`{"error":"Failed to create chirp."}`))
+		respondWithError(writer, request, http.StatusInternalServerError, "Failed to create chirp.", err)
 		return
 	}
 
@@ -229,15 +210,7 @@ func (cfg *apiConfig) chirpHandler(writer http.ResponseWriter, request *http.Req
 	InfoLogger.Printf("Generating response body from chirp.")
 	responseBody := Chirp{ID: chirp.ID, CreatedAt: chirp.CreatedAt, UpdatedAt: chirp.UpdatedAt, Body: chirp.Body, User_ID: chirp.UserID.UUID}
 
-	dat, err := json.Marshal(responseBody)
-	if err != nil {
-		ErrorLogger.Println(err)
-		writer.WriteHeader(500)
-		writer.Write([]byte(`{"error":"Failed to Marshal response."}`))
-		return
-	}
-	writer.WriteHeader(201)
-	writer.Write(dat)
+	respondWithJson(writer, request, http.StatusCreated, responseBody)
 	InfoLogger.Printf("Successfully created chirp.")
 	return
 }
@@ -250,9 +223,8 @@ func (cfg *apiConfig) chirpReadHandler(writer http.ResponseWriter, request *http
 	InfoLogger.Printf("Loading chirps from database.")
 	chirpArray, err := cfg.db.ReadAllChirps(request.Context())
 	if err != nil {
-		ErrorLogger.Println(err)
-		writer.WriteHeader(500)
-		writer.Write([]byte(`{"error":"Failed to read chirps"`))
+		respondWithError(writer, request, http.StatusInternalServerError, "Failed to read chirps", err)
+		return
 	}
 	InfoLogger.Printf("Succesfully loaded chirps.")
 	var chirpSlice ChirpSlice
@@ -263,15 +235,7 @@ func (cfg *apiConfig) chirpReadHandler(writer http.ResponseWriter, request *http
 	}
 
 	InfoLogger.Printf("Attempting to Marshal response.")
-	dat, err := json.Marshal(chirpSlice)
-	if err != nil {
-		ErrorLogger.Println(err)
-		writer.WriteHeader(500)
-		writer.Write(internalServerErrorJSON)
-		return
-	}
-	writer.WriteHeader(200)
-	writer.Write(dat)
+	respondWithJson(writer, request, http.StatusOK, chirpSlice)
 	return
 }
 
@@ -284,27 +248,18 @@ func (cfg *apiConfig) chirpSpecificReadHandler(writer http.ResponseWriter, reque
 	chirpIDString := request.PathValue("chirpID")
 	chirpID, err := uuid.Parse(chirpIDString)
 	if err != nil {
-		ErrorLogger.Println(err)
-		writer.WriteHeader(500)
-		writer.Write([]byte(`{"error":"Failed to read chirps"`))
+		respondWithError(writer, request, http.StatusInternalServerError, "Failed to read chirpID", err)
+		return
 	}
 
 	dbChirp, err := cfg.db.ReadChirp(request.Context(), chirpID)
 	if err != nil {
-		ErrorLogger.Println(err)
-		writer.WriteHeader(404)
-		writer.Write([]byte(`{"error":"chirp not found"`))
-	}
-	responseBody := Chirp{ID: dbChirp.ID, CreatedAt: dbChirp.CreatedAt, UpdatedAt: dbChirp.UpdatedAt, Body: dbChirp.Body, User_ID: dbChirp.UserID.UUID}
-	dat, err := json.Marshal(responseBody)
-	if err != nil {
-		ErrorLogger.Println(err)
-		writer.WriteHeader(500)
-		writer.Write([]byte(`{"error":"Failed to Marshal response."}`))
+		respondWithError(writer, request, http.StatusNotFound, "chirp not found", err)
 		return
 	}
-	writer.WriteHeader(200)
-	writer.Write(dat)
+	responseBody := Chirp{ID: dbChirp.ID, CreatedAt: dbChirp.CreatedAt, UpdatedAt: dbChirp.UpdatedAt, Body: dbChirp.Body, User_ID: dbChirp.UserID.UUID}
+	respondWithJson(writer, request, http.StatusOK, responseBody)
+
 	InfoLogger.Printf("Successfully read chirp.")
 	return
 }
@@ -324,41 +279,29 @@ func (cfg *apiConfig) userHandler(writer http.ResponseWriter, request *http.Requ
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		ErrorLogger.Println(err)
-		writer.WriteHeader(500)
-		writer.Write(internalServerErrorJSON)
+		respondWithError(writer, request, http.StatusInternalServerError, internalServerError, err)
 		return
 	}
 
 	InfoLogger.Printf("Successfully loaded email: %s", params.Email)
 	if params.Email == "" {
 		WarnLogger.Printf("The email paramater is empty. Cannot create a new user without an email.")
-		writer.WriteHeader(400)
-		writer.Write([]byte(`{"error":"Email is required"}`))
+		respondWithError(writer, request, http.StatusBadRequest, "Email is required", nil)
 		return
 	}
 
 	InfoLogger.Printf("Attempting to create user with email: %s", params.Email)
 	user, err := cfg.db.CreateUser(request.Context(), params.Email)
 	if err != nil {
-		ErrorLogger.Println(err)
-		writer.WriteHeader(500)
-		writer.Write([]byte(`{"error":"Failed to create user."}`))
+		respondWithError(writer, request, http.StatusInternalServerError, "Failed to create user.", err)
 		return
 	}
-
 	InfoLogger.Printf("Successfully created a user for email: %s", params.Email)
+
 	InfoLogger.Printf("Generating response body from user.")
 	responseBody := User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email}
-	dat, err := json.Marshal(responseBody)
-	if err != nil {
-		ErrorLogger.Println(err)
-		writer.WriteHeader(500)
-		writer.Write([]byte(`{"error":"Failed to Marshal response."}`))
-		return
-	}
-	writer.WriteHeader(201)
-	writer.Write(dat)
+	respondWithJson(writer, request, http.StatusCreated, responseBody)
+
 	InfoLogger.Printf("Successfully created user.")
 	return
 }
@@ -368,18 +311,17 @@ func (cfg *apiConfig) adminReset(writer http.ResponseWriter, request *http.Reque
 	defer cfg.mu.Unlock()
 
 	if cfg.platform != "dev" {
-		writer.WriteHeader(403)
+		writer.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	err := cfg.db.DeleteUsers(request.Context())
 	if err != nil {
-		writer.WriteHeader(500)
-		writer.Write([]byte(`{"error":"Failed to delete users."}`))
+		respondWithError(writer, request, http.StatusInternalServerError, "Failed to delete users.", err)
 		return
 	}
 
-	writer.WriteHeader(200)
+	writer.WriteHeader(http.StatusOK)
 	return
 }
 
@@ -403,4 +345,35 @@ func cleanBody(body string) (string, error) {
 	}
 	cleaned_body := strings.Join(split_body, " ")
 	return cleaned_body, nil
+}
+
+func respondWithError(writer http.ResponseWriter, request *http.Request, code int, message string, err error) {
+	if err != nil {
+		ErrorLogger.Println(err)
+	}
+	if code > 499 {
+		ErrorLogger.Printf("Responding with 5XX error: %s", message)
+	}
+
+	type errorResponse struct {
+		Error string `json:"error"`
+	}
+
+	respondWithJson(writer, request, code, errorResponse{
+		Error: message,
+	})
+}
+
+func respondWithJson(writer http.ResponseWriter, request *http.Request, code int, payload interface{}) {
+	writer.Header().Set("Content-Type", "application/json")
+	dat, err := json.Marshal(payload)
+	if err != nil {
+		ErrorLogger.Println(err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		writer.Write([]byte(`{"error":"Failed to Marshal response."}`))
+		return
+	}
+
+	writer.WriteHeader(code)
+	writer.Write(dat)
 }
