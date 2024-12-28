@@ -20,7 +20,14 @@ services:
 
   goose:
     build: .
-    command: sh -c "echo 'Starting goose service...' && echo 'DB_URL=${DB_URL}' && ./scripts/wait-for-it.sh db:5432 -- goose -v -dir /app/sql/schema postgres '${DB_URL}' up 2>&1"
+    command: >
+      /bin/sh -c "
+      echo 'Starting goose service...' &&
+      echo 'Current directory:' && pwd &&
+      echo 'Listing sql/schema:' && ls -la /app/sql/schema &&
+      echo 'DB_URL=${DB_URL}' &&
+      ./scripts/wait-for-it.sh db:5432 &&
+      goose -v -dir /app/sql/schema postgres '${DB_URL}' up"
     volumes:
       - ./sql:/app/sql
       - ./sqlc.yaml:/app/sqlc.yaml
