@@ -24,6 +24,7 @@ func main() {
 	mux.HandleFunc("POST /api/reset", apiCfg.MiddlewareMetricsReset)
 	mux.HandleFunc("POST /api/chirps", apiCfg.ChirpHandler)
 	mux.HandleFunc("POST /api/users", apiCfg.UserHandler)
+	mux.HandleFunc("POST /api/login", apiCfg.LoginHandler)
 	mux.HandleFunc("POST /admin/reset", apiCfg.AdminReset)
 
 	mux.HandleFunc("GET /", handlers.DockerHandler)

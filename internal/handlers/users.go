@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kwekkwekpatu/chirpy/internal/auth"
+	"github.com/kwekkwekpatu/chirpy/internal/database"
 	"github.com/kwekkwekpatu/chirpy/internal/util"
 	_ "github.com/lib/pq"
 )
@@ -19,7 +21,8 @@ type User struct {
 
 func (cfg *ApiConfig) UserHandler(writer http.ResponseWriter, request *http.Request) {
 	type parameters struct {
-		Email string `json:"email"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	cfg.mu.Lock()
@@ -43,8 +46,19 @@ func (cfg *ApiConfig) UserHandler(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
+	util.InfoLogger.Printf("Processing password")
+	hashedPassword, err := auth.HashPassword(params.Password)
+	if err != nil {
+		util.RespondWithError(writer, request, http.StatusInternalServerError, "Failed to hash password", err)
+	}
+
+	userParams := database.CreateUserParams{
+		Email:          params.Email,
+		HashedPassword: hashedPassword,
+	}
+
 	util.InfoLogger.Printf("Attempting to create user with email: %s", params.Email)
-	user, err := cfg.db.CreateUser(request.Context(), params.Email)
+	user, err := cfg.db.CreateUser(request.Context(), userParams)
 	if err != nil {
 		util.RespondWithError(writer, request, http.StatusInternalServerError, "Failed to create user.", err)
 		return
