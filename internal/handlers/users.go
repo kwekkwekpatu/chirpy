@@ -25,8 +25,6 @@ func (cfg *ApiConfig) UserHandler(writer http.ResponseWriter, request *http.Requ
 		Password string `json:"password"`
 	}
 
-	cfg.mu.Lock()
-	defer cfg.mu.Unlock()
 	util.InfoLogger.Printf("Handling user creation.")
 
 	util.InfoLogger.Printf("Loading request parameter.")
