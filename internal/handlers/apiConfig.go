@@ -16,6 +16,7 @@ type ApiConfig struct {
 	fileserverHits int
 	db             *database.Queries
 	platform       string
+	jwtSecret      string
 }
 
 var APIConfig *ApiConfig
@@ -29,8 +30,8 @@ func init() {
 	}
 	platform := os.Getenv("PLATFORM")
 	dbURL := os.Getenv("DB_URL")
+	jwtSecret := os.Getenv("JWT_SECRET")
 	util.InfoLogger.Printf("Succesfully loaded environment variables.")
-	util.InfoLogger.Printf("Succesfully DB_URL: %s", dbURL)
 
 	util.InfoLogger.Printf("Loading Postgres database.")
 	db, err := sql.Open("postgres", dbURL)
@@ -40,5 +41,5 @@ func init() {
 	dbQueries := database.New(db)
 	util.InfoLogger.Printf("Succesfully loaded database.")
 
-	APIConfig = &ApiConfig{db: dbQueries, platform: platform}
+	APIConfig = &ApiConfig{db: dbQueries, platform: platform, jwtSecret: jwtSecret}
 }
