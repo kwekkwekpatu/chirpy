@@ -1,5 +1,6 @@
 services:
   db:
+    container_name: db
     image: postgres:13
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -7,37 +8,55 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - db_data:/var/lib/postgresql/data
+    networks:
+      - chirpy-network
 
   sqlc:
-    build: .
+    container_name: sqlc
+    build:
+      context: .
+      dockerfile: Dockerfile.goose
     command: sqlc generate
     volumes:
       - ./sql:/app/sql
       - ./sqlc.yaml:/app/sqlc.yaml
       - .:/app/src
+    networks:
+      - chirpy-network
 
   goose:
-    build: .
-    command: >
-      /bin/sh -c "
-      echo 'Starting goose service...' &&
-      echo 'Current directory:' && pwd &&
-      echo 'Listing sql/schema:' && ls -la /app/sql/schema &&
-      echo 'DB_URL=${DB_URL}' &&
-      ./scripts/wait-for-it.sh db:5432 &&
-      goose -v -dir /app/sql/schema postgres '${DB_URL}' up"
+    container_name: goose
+    build:
+      context: .
+      dockerfile: Dockerfile.goose
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DB_URL: ${DB_URL}
+    command: sh /app/scripts/goose-start.sh
     volumes:
       - ./sql:/app/sql
       - ./sqlc.yaml:/app/sqlc.yaml
       - ./scripts:/app/scripts
+    networks:
+      - chirpy-network
     depends_on:
-      - db
-      - sqlc
+      db:
+        condition: service_healthy
 
   chirpy-app:
-    build: .
+    container_name: chirpy-app
+    build:
+      context: .
+      dockerfile: Dockerfile.app
     volumes:
       - ./sql:/app/sql
       - ./sqlc.yaml:/app/sqlc.yaml
@@ -47,9 +66,18 @@ services:
     environment:
       DB_URL: ${DB_URL}
       PLATFORM: ${PLATFORM}
+    networks:
+      - chirpy-network
     depends_on:
-      - goose
-    command: sh -c "./scripts/wait-for-it.sh db:5432 -- /bin/chirpy"
+      goose:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    command: sh -c "/app/chirpy"
 
 volumes:
   db_data:
+
+networks:
+  chirpy-network:
+    driver: bridge
