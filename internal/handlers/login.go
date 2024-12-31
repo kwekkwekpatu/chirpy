@@ -7,19 +7,22 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kwekkwekpatu/chirpy/internal/auth"
+	"github.com/kwekkwekpatu/chirpy/internal/database"
 	"github.com/kwekkwekpatu/chirpy/internal/util"
 )
 
 const (
-	MaxExpirationSeconds = 3600 // 1 hour in seconds
+	MaxExpirationSeconds      = 3600           // 1 hour in seconds
+	RefreshExpirationDuration = 60 * 24 * 3600 // 60 days in seconds
 )
 
 type LoginResponse struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
-	Token     string    `json:"token"`
+	ID           uuid.UUID `json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	Email        string    `json:"email"`
+	Token        string    `json:"token"`
+	RefreshToken string    `json:"refresh_token"`
 }
 
 func (cfg *ApiConfig) LoginHandler(writer http.ResponseWriter, request *http.Request) {
@@ -51,29 +54,33 @@ func (cfg *ApiConfig) LoginHandler(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
-	expiresIn := MaxExpirationSeconds
-
-	if params.ExpiresInSeconds != nil {
-		// We are capping the expiry timer to the default value.
-		// So we only need to do something if the expiry is smaller than default.
-		if *params.ExpiresInSeconds <= 0 {
-			util.RespondWithError(writer, request, http.StatusBadRequest, "Expiration time must be positive", nil)
-			return
-		}
-		if *params.ExpiresInSeconds < MaxExpirationSeconds {
-			expiresIn = *params.ExpiresInSeconds
-		}
-	}
-	duration := time.Duration(expiresIn) * time.Second
-
-	token, err := auth.MakeJWT(dbUser.ID, cfg.jwtSecret, duration)
+	token, err := auth.MakeJWT(dbUser.ID, cfg.jwtSecret, time.Hour)
 	if err != nil {
-		util.RespondWithError(writer, request, http.StatusInternalServerError, "Failed to create token.", err)
+		util.RespondWithError(writer, request, http.StatusUnauthorized, "Failed to create token.", err)
+		return
+	}
+
+	refreshDuration := time.Duration(RefreshExpirationDuration) * time.Second
+	refreshToken, err := auth.MakeRefreshToken()
+	if err != nil {
+		util.RespondWithError(writer, request, http.StatusUnauthorized, "Failed to create refresh_token.", err)
+		return
+	}
+
+	refreshParams := database.CreateRefreshTokenParams{
+		Token:     refreshToken,
+		ExpiresAt: time.Now().Add(refreshDuration),
+		UserID:    dbUser.ID,
+	}
+
+	_, err = cfg.db.CreateRefreshToken(request.Context(), refreshParams)
+	if err != nil {
+		util.RespondWithError(writer, request, http.StatusUnauthorized, "Failed to store refresh_token.", err)
 		return
 	}
 
 	util.InfoLogger.Printf("Generating response body from login.")
-	responseBody := LoginResponse{ID: dbUser.ID, CreatedAt: dbUser.CreatedAt, UpdatedAt: dbUser.UpdatedAt, Email: dbUser.Email, Token: token}
+	responseBody := LoginResponse{ID: dbUser.ID, CreatedAt: dbUser.CreatedAt, UpdatedAt: dbUser.UpdatedAt, Email: dbUser.Email, Token: token, RefreshToken: refreshToken}
 
 	util.RespondWithJson(writer, request, http.StatusOK, responseBody)
 
