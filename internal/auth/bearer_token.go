@@ -1,11 +1,17 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/kwekkwekpatu/chirpy/internal/util"
+)
+
+const (
+	RandomBytesCount = 32
 )
 
 func GetBearerToken(headers http.Header) (string, error) {
@@ -29,4 +35,16 @@ func GetBearerToken(headers http.Header) (string, error) {
 
 	util.InfoLogger.Println("Successfully retrieved bearer token")
 	return authorizationFields[1], nil
+}
+
+func MakeRefreshToken() (string, error) {
+	util.InfoLogger.Println("Making refresh token")
+	tokenbytes := make([]byte, RandomBytesCount)
+	_, err := rand.Read(tokenbytes)
+	if err != nil {
+		return "", fmt.Errorf("Failed to make random bytes")
+	}
+
+	util.InfoLogger.Println("Succesfully made token")
+	return hex.EncodeToString(tokenbytes), nil
 }
