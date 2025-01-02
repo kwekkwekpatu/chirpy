@@ -28,6 +28,7 @@ func main() {
 	mux.HandleFunc("POST /api/refresh", apiCfg.RefreshHandler)
 	mux.HandleFunc("POST /api/revoke", apiCfg.RevokeHandler)
 	mux.HandleFunc("POST /admin/reset", apiCfg.AdminReset)
+	mux.HandleFunc("PUT /api/users", apiCfg.UpdateUserPasswordHandler)
 
 	mux.HandleFunc("GET /", handlers.DockerHandler)
 
