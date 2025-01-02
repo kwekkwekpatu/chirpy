@@ -15,3 +15,7 @@ WHERE id = $1;
 SELECT id, created_at, updated_at, body, user_id
 FROM chirps
 ORDER BY created_at;
+
+-- name: DeleteSpecificChirp :exec
+DELETE FROM chirps
+WHERE user_id = $1 AND id = $2;

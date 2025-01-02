@@ -137,6 +137,60 @@ func (cfg *ApiConfig) ChirpSpecificReadHandler(writer http.ResponseWriter, reque
 	return
 }
 
+func (cfg *ApiConfig) ChirpDeleteSpecificHandler(writer http.ResponseWriter, request *http.Request) {
+	util.InfoLogger.Printf("Handling chirp deletion.")
+
+	util.InfoLogger.Printf("Extracting and validating JWT token")
+	tokenString, err := auth.GetBearerToken(request.Header)
+	if err != nil {
+		util.RespondWithError(writer, request, http.StatusUnauthorized, "Missing authorization header.", err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(tokenString, cfg.jwtSecret)
+	if err != nil {
+		util.RespondWithError(writer, request, http.StatusUnauthorized, "JWT is invalid", err)
+		return
+	}
+
+	util.InfoLogger.Printf("Successfully validated user_id: %s", userID)
+
+	util.InfoLogger.Printf("Reading request ChirpID.")
+	chirpIDString := request.PathValue("chirpID")
+	chirpID, err := uuid.Parse(chirpIDString)
+	if err != nil {
+		util.RespondWithError(writer, request, http.StatusInternalServerError, "Failed to read chirpID", err)
+		return
+	}
+
+	dbChirp, err := cfg.db.ReadChirp(request.Context(), chirpID)
+	if err != nil {
+		util.RespondWithError(writer, request, http.StatusNotFound, "chirp not found", err)
+		return
+	}
+
+	if dbChirp.UserID.UUID != userID {
+		util.RespondWithError(writer, request, http.StatusForbidden, "Chirp does not belong to user", fmt.Errorf("Chirp does not belong to user."))
+		return
+	}
+
+	chirpParams := database.DeleteSpecificChirpParams{
+		ID:     chirpID,
+		UserID: dbChirp.UserID,
+	}
+
+	util.InfoLogger.Printf("Attempting to delete chirp")
+	err = cfg.db.DeleteSpecificChirp(request.Context(), chirpParams)
+	if err != nil {
+		util.RespondWithError(writer, request, http.StatusInternalServerError, "Failed to delete chirp.", err)
+		return
+	}
+
+	writer.WriteHeader(http.StatusNoContent)
+	util.InfoLogger.Printf("Successfully deleted chirp: %s", chirpID)
+	return
+}
+
 func cleanBody(body string) (string, error) {
 	if body == "" {
 		return body, nil
