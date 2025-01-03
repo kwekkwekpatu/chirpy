@@ -95,8 +95,21 @@ func (cfg *ApiConfig) ChirpHandler(writer http.ResponseWriter, request *http.Req
 func (cfg *ApiConfig) ChirpReadHandler(writer http.ResponseWriter, request *http.Request) {
 	util.InfoLogger.Printf("Handling reading of all chirps.")
 
+	util.InfoLogger.Printf("Checking for query parameters.")
+	authorID := request.URL.Query().Get("author_id")
+	authorUUID := uuid.New()
+	if authorID != "" {
+		util.InfoLogger.Printf("Parsing authorID")
+		var err error
+		authorUUID, err = uuid.Parse(authorID)
+		if err != nil {
+			util.RespondWithError(writer, request, http.StatusInternalServerError, "Invalid author_id", err)
+			return
+		}
+	}
+
 	util.InfoLogger.Printf("Loading chirps from database.")
-	chirpArray, err := cfg.db.ReadAllChirps(request.Context())
+	chirpArray, err := cfg.db.ReadAllChirps(request.Context(), authorUUID)
 	if err != nil {
 		util.RespondWithError(writer, request, http.StatusInternalServerError, "Failed to read chirps", err)
 		return
