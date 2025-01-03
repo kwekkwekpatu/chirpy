@@ -23,6 +23,7 @@ type LoginResponse struct {
 	Email        string    `json:"email"`
 	Token        string    `json:"token"`
 	RefreshToken string    `json:"refresh_token"`
+	ChirpyIsRed  bool      `json:"is_chirpy_red"`
 }
 
 func (cfg *ApiConfig) LoginHandler(writer http.ResponseWriter, request *http.Request) {
@@ -80,7 +81,9 @@ func (cfg *ApiConfig) LoginHandler(writer http.ResponseWriter, request *http.Req
 	}
 
 	util.InfoLogger.Printf("Generating response body from login.")
-	responseBody := LoginResponse{ID: dbUser.ID, CreatedAt: dbUser.CreatedAt, UpdatedAt: dbUser.UpdatedAt, Email: dbUser.Email, Token: token, RefreshToken: refreshToken}
+	responseBody := LoginResponse{ID: dbUser.ID, CreatedAt: dbUser.CreatedAt,
+		UpdatedAt: dbUser.UpdatedAt, Email: dbUser.Email, Token: token,
+		RefreshToken: refreshToken, ChirpyIsRed: dbUser.IsChirpyRed}
 
 	util.RespondWithJson(writer, request, http.StatusOK, responseBody)
 

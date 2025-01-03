@@ -17,6 +17,7 @@ type ApiConfig struct {
 	db             *database.Queries
 	platform       string
 	jwtSecret      string
+	polkaKey       string
 }
 
 var APIConfig *ApiConfig
@@ -31,6 +32,7 @@ func init() {
 	platform := os.Getenv("PLATFORM")
 	dbURL := os.Getenv("DB_URL")
 	jwtSecret := os.Getenv("JWT_SECRET")
+	polkaKey := os.Getenv("POLKA_KEY")
 	util.InfoLogger.Printf("Succesfully loaded environment variables.")
 
 	util.InfoLogger.Printf("Loading Postgres database.")
@@ -41,5 +43,5 @@ func init() {
 	dbQueries := database.New(db)
 	util.InfoLogger.Printf("Succesfully loaded database.")
 
-	APIConfig = &ApiConfig{db: dbQueries, platform: platform, jwtSecret: jwtSecret}
+	APIConfig = &ApiConfig{db: dbQueries, platform: platform, jwtSecret: jwtSecret, polkaKey: polkaKey}
 }

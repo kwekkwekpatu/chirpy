@@ -13,10 +13,11 @@ import (
 )
 
 type User struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
+	ID         uuid.UUID `json:"id"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	Email      string    `json:"email"`
+	ChirpIsRed bool      `json:"is_chirpy_red"`
 }
 
 func (cfg *ApiConfig) UserHandler(writer http.ResponseWriter, request *http.Request) {
@@ -64,7 +65,7 @@ func (cfg *ApiConfig) UserHandler(writer http.ResponseWriter, request *http.Requ
 	util.InfoLogger.Printf("Successfully created a user for email: %s", params.Email)
 
 	util.InfoLogger.Printf("Generating response body from user.")
-	responseBody := User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email}
+	responseBody := User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email, ChirpIsRed: user.IsChirpyRed}
 	util.RespondWithJson(writer, request, http.StatusCreated, responseBody)
 
 	util.InfoLogger.Printf("Successfully created user.")
@@ -132,7 +133,7 @@ func (cfg *ApiConfig) UpdateUserPasswordHandler(writer http.ResponseWriter, requ
 	util.InfoLogger.Printf("Successfully updated password for email: %s", params.Email)
 
 	util.InfoLogger.Printf("Generating response body from user.")
-	responseBody := User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email}
+	responseBody := User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email, ChirpIsRed: user.IsChirpyRed}
 	util.RespondWithJson(writer, request, http.StatusOK, responseBody)
 
 	util.InfoLogger.Printf("Successfully updated password.")
