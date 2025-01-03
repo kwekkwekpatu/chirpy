@@ -30,6 +30,7 @@ func main() {
 	mux.HandleFunc("POST /api/revoke", apiCfg.RevokeHandler)
 	mux.HandleFunc("POST /admin/reset", apiCfg.AdminReset)
 	mux.HandleFunc("PUT /api/users", apiCfg.UpdateUserPasswordHandler)
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.UpgradeUser)
 
 	mux.HandleFunc("GET /", handlers.DockerHandler)
 
