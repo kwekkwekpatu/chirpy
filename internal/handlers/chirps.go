@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -97,19 +98,25 @@ func (cfg *ApiConfig) ChirpReadHandler(writer http.ResponseWriter, request *http
 
 	util.InfoLogger.Printf("Checking for query parameters.")
 	authorID := request.URL.Query().Get("author_id")
-	authorUUID := uuid.New()
+	authorUUID := uuid.Nil
 	if authorID != "" {
 		util.InfoLogger.Printf("Parsing authorID")
 		var err error
 		authorUUID, err = uuid.Parse(authorID)
 		if err != nil {
-			util.RespondWithError(writer, request, http.StatusInternalServerError, "Invalid author_id", err)
+			util.RespondWithError(writer, request, http.StatusBadRequest, "Invalid author_id", err)
 			return
 		}
 	}
 
+	sortValue := request.URL.Query().Get("sort")
+	sortValue = strings.ToLower(sortValue)
+	if sortValue != "desc" {
+		sortValue = "asc"
+	}
+
 	util.InfoLogger.Printf("Loading chirps from database.")
-	chirpArray, err := cfg.db.ReadAllChirps(request.Context(), authorUUID)
+	chirpArray, err := cfg.db.ReadAllChirps(request.Context())
 	if err != nil {
 		util.RespondWithError(writer, request, http.StatusInternalServerError, "Failed to read chirps", err)
 		return
@@ -119,8 +126,18 @@ func (cfg *ApiConfig) ChirpReadHandler(writer http.ResponseWriter, request *http
 
 	util.InfoLogger.Printf("Generating response body from chirps.")
 	for _, chirp := range chirpArray {
+		if authorUUID != uuid.Nil && chirp.UserID.UUID != authorUUID {
+			continue
+		}
 		chirpSlice = append(chirpSlice, Chirp{ID: chirp.ID, CreatedAt: chirp.CreatedAt, UpdatedAt: chirp.UpdatedAt, Body: chirp.Body, User_ID: chirp.UserID.UUID})
 	}
+
+	sort.Slice(chirpSlice, func(i, j int) bool {
+		if sortValue == "desc" {
+			return chirpSlice[i].CreatedAt.After(chirpSlice[j].CreatedAt)
+		}
+		return chirpSlice[i].CreatedAt.Before(chirpSlice[j].CreatedAt)
+	})
 
 	util.InfoLogger.Printf("Attempting to Marshal response.")
 	util.RespondWithJson(writer, request, http.StatusOK, chirpSlice)
